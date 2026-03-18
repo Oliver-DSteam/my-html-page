@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>기상예보 데이터 구성 비교</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .base-time-row { background-color: #f8fafc; }
+        .bg-single { background-color: #3b82f6; color: white; } 
+        .bg-concat { background-color: #10b981; color: white; } 
+        .bg-unused { background-color: #e2e8f0; color: #94a3b8; }
+        .discontinuity-marker {
+            stroke: #ef4444;
+            stroke-width: 2;
+            stroke-dasharray: 4;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-4 md:p-8 font-sans text-slate-900">
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-200 bg-slate-800 text-white">
+            <h1 class="text-2xl font-bold">기상수치예보 데이터 구성 방식 비교</h1>
+            <p class="text-slate-300 text-sm mt-2">09KST Base Time 기준 데이터 활용 시나리오 (연속 예보 vs 구간 이어붙이기)</p>
+        </div>
+
+        <div class="p-6">
+            <!-- 시계열 그래프 섹션 (추가됨) -->
+            <div class="mb-12">
+                <div class="flex items-center mb-6">
+                    <div class="w-5 h-5 bg-orange-500 rounded mr-2"></div>
+                    <h2 class="text-xl font-bold">시각적 차이: 시계열 데이터 흐름 비교 (예: 기온)</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <canvas id="weatherChart" height="150"></canvas>
+                    </div>
+                    <div class="flex flex-col justify-center space-y-4">
+                        <div class="p-4 bg-white rounded-lg border-l-4 border-blue-500 shadow-sm">
+                            <h4 class="font-bold text-blue-600 text-sm">방식 A: 연속성 유지</h4>
+                            <p class="text-xs text-slate-500 mt-1">하나의 물리 엔진이 계산한 결과로, 모든 시간대의 기온 변화가 자연스럽고 매끄럽습니다.</p>
+                        </div>
+                        <div class="p-4 bg-white rounded-lg border-l-4 border-emerald-500 shadow-sm">
+                            <h4 class="font-bold text-emerald-600 text-sm">방식 B: 업데이트 및 단절</h4>
+                            <p class="text-xs text-slate-500 mt-1">매일 최신 정보를 반영하지만, 서로 다른 예보가 만나는 지점(빨간 점선)에서 데이터가 튀는 현상이 발생합니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-10">
+
+            <!-- 기존 스케줄표 섹션 -->
+            <div class="grid grid-cols-1 gap-10">
+                <!-- Case 1: 90시간 연속 예측 -->
+                <div>
+                    <div class="flex items-center mb-4">
+                        <div class="w-4 h-4 bg-blue-500 rounded-full mr-2"></div>
+                        <h2 class="text-lg font-semibold text-slate-800">방식 A: 09KST 기준 90시간 연속 예측 (Single Run)</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-center border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100">
+                                    <th class="p-2 border">발표시각 (Base)</th>
+                                    <th colspan="4" class="p-2 border bg-blue-50 text-blue-700">D+1 (내일)</th>
+                                    <th colspan="4" class="p-2 border bg-blue-50 text-blue-700">D+2 (모레)</th>
+                                    <th colspan="4" class="p-2 border bg-blue-50 text-blue-700">D+3 (글피)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="p-3 border font-bold bg-slate-50 text-slate-700">Day 1 09KST</td>
+                                    <td colspan="11" class="p-3 border bg-single rounded-sm shadow-inner font-medium italic">
+                                        하나의 모델 실행 결과가 90시간까지 중단 없이 쭉 이어짐
+                                    </td>
+                                    <td class="p-2 border bg-slate-100">...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Case 2: 이어붙이기 -->
+                <div>
+                    <div class="flex items-center mb-4">
+                        <div class="w-4 h-4 bg-emerald-500 rounded-full mr-2"></div>
+                        <h2 class="text-lg font-semibold text-slate-800">방식 B: 최신 24시간 구간(16~39h) 계속 이어붙이기 (Concatenation)</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-center border-collapse">
+                            <tbody>
+                                <tr class="base-time-row">
+                                    <td class="p-2 border font-bold text-slate-700 w-32">Day 1 09KST</td>
+                                    <td class="p-2 border bg-unused w-16">1~15h</td>
+                                    <td colspan="3" class="p-2 border bg-concat font-bold border-2 border-slate-800 shadow-md">
+                                        [내일 예보 추출]
+                                    </td>
+                                    <td colspan="7" class="p-2 border bg-unused opacity-50 text-[10px]">이후는 안씀</td>
+                                </tr>
+                                <tr><td class="p-1" colspan="13 text-center">▼</td></tr>
+                                <tr class="base-time-row">
+                                    <td class="p-2 border font-bold text-slate-700">Day 2 09KST</td>
+                                    <td colspan="4" class="p-2 border bg-slate-100 text-slate-300">어제 치로 채워짐</td>
+                                    <td colspan="3" class="p-2 border bg-concat font-bold border-2 border-slate-800 shadow-md">
+                                        [모레 예보 추출]
+                                    </td>
+                                    <td colspan="4" class="p-2 border bg-unused opacity-50 text-[10px]">이후는 안씀</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Footer -->
+        <div class="p-6 bg-slate-50 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h4 class="font-bold text-slate-800 mb-2">💡 어떤 것을 선택해야 하나요?</h4>
+                <ul class="text-sm space-y-2 text-slate-600">
+                    <li><strong class="text-blue-600">방식 A (연속):</strong> 데이터 분석 모델의 입력값으로 사용할 때 좋습니다. 물리적 인과관계가 깨지지 않아 딥러닝 모델 학습 시 노이즈가 적습니다.</li>
+                    <li><strong class="text-emerald-600">방식 B (이어붙이기):</strong> 실제 날씨와 가장 가까운 '최종 예보치'를 아카이빙할 때 좋습니다. 실시간 서비스용으로 적합합니다.</li>
+                </ul>
+            </div>
+            <div class="bg-red-50 p-4 rounded border border-red-100">
+                <h4 class="font-bold text-red-800 mb-1 text-sm">⚠️ 그래프의 단절(점프) 주의</h4>
+                <p class="text-xs text-red-700 leading-relaxed">
+                    방식 B의 그래프에서 빨간 점선 부근을 보세요. 어제는 오늘 밤 기온을 15도로 예보했지만, 오늘 아침 새로 들어온 데이터는 13도로 보고 있습니다. 
+                    이 두 조각을 붙이면 밤 12시에 기온이 2도 순간이동 하는 현상이 발생하며, 이를 <strong>데이터 불연속성</strong>이라고 합니다.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('weatherChart').getContext('2d');
+        
+        // 가상의 기온 데이터 생성
+        const labels = ['D+1 00h', '06h', '12h', '18h', 'D+2 00h', '06h', '12h', '18h', 'D+3 00h'];
+        
+        const dataA = [15, 13, 22, 25, 16, 14, 23, 24, 17]; // 매끄러운 연속 데이터
+        const dataB = [15, 13, 22, 25, 14, 12, 20, 22, 15]; // D+2 00h 지점에서 16->14로 점프 (불연속)
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '방식 A (90h 연속 예보)',
+                    data: dataA,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'transparent',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    pointRadius: 4
+                }, {
+                    label: '방식 B (24h 조각 이어붙이기)',
+                    data: dataB,
+                    borderColor: '#10b981',
+                    backgroundColor: 'transparent',
+                    borderWidth: 3,
+                    borderDash: [5, 5],
+                    tension: 0.2,
+                    pointRadius: 6,
+                    pointStyle: 'rectRot'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function(items) {
+                                if (items[0].label === 'D+2 00h') {
+                                    return '\n[주의] 방식 B의 연결 지점\n데이터 점프 발생!';
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: false,
+                        title: { display: true, text: '기온 (°C)' }
+                    }
+                }
+            },
+            plugins: [{
+                afterDraw: chart => {
+                    const ctx = chart.ctx;
+                    const xAxis = chart.scales.x;
+                    const yAxis = chart.scales.y;
+                    const index = 4; // D+2 00h 인덱스
+                    const xPos = xAxis.getPixelForTick(index);
+                    
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(xPos, yAxis.top);
+                    ctx.lineTo(xPos, yAxis.bottom);
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.fillText('데이터 단절 지점', xPos + 5, yAxis.top + 20);
+                    ctx.restore();
+                }
+            }]
+        });
+    </script>
+</body>
+</html>
